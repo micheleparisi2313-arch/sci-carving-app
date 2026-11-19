@@ -50,3 +50,5 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: lef
 button.share { margin-top: 14px; }
 .chart { width: 100%; height: auto; margin: 4px 0 8px; }
 .iq { width: 90px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; }
+.rank { margin-top: 4px; font-size: 14px; }
+.tscore { float: right; font-style: normal; font-weight: 700; color: var(--accent); }

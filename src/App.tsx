@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { analizza, type Analisi } from './analyze';
 import { EDGES } from './pose';
 import { trovaCurve } from './turns';
-import { CURVE_MINIME, carvingScore, giudicaCurva, giudicaRitmo, priorita, punteggi, simmetria, type Esito, type Livello } from './rules';
+import { CURVE_CLASSIFICA, CURVE_MINIME, carvingScore, punteggioClassifica, punteggioCurva, giudicaCurva, giudicaRitmo, priorita, punteggi, simmetria, type Esito, type Livello } from './rules';
 import { aggiornaSkiIq, caricaStorico, salvaNelloStorico, type VoceStorico } from './storage';
 import { condividi, creaClip } from './share';
 import { Progressi } from './Progressi';
@@ -35,7 +35,9 @@ export default function App() {
     const curve = trovaCurve(analisi.campioni);
     const giudizi = curve.map((c) => giudicaCurva(c, livello));
     const punti = punteggi(giudizi);
+    const perCurva = giudizi.map(punteggioCurva);
     return {
+      perCurva, classifica: punteggioClassifica(perCurva),
       curve, giudizi, punti, ritmo: giudicaRitmo(curve), top: priorita(giudizi),
       simm: simmetria(curve, giudizi), score: carvingScore(punti, curve.length),
     };
@@ -104,7 +106,8 @@ export default function App() {
       const curve = trovaCurve(a.campioni);
       const p = punteggi(curve.map((c) => giudicaCurva(c, livello)));
       const sc = carvingScore(p, curve.length);
-      setStorico(salvaNelloStorico({ data: new Date().toISOString(), nome, curve: curve.length, score: sc.punti, valido: sc.valido, punti: p }));
+      const cl = punteggioClassifica(curve.map((c) => punteggioCurva(giudicaCurva(c, livello))));
+      setStorico(salvaNelloStorico({ data: new Date().toISOString(), nome, curve: curve.length, score: sc.punti, valido: sc.valido, classifica: cl ?? undefined, punti: p }));
     } catch (err) {
       setErrore(err instanceof Error ? err.message : String(err)); setFase('tocco');
     }
@@ -193,6 +196,11 @@ export default function App() {
                     {referto.curve.length} curve analizzate.{' '}
                     {referto.score.valido ? 'Punteggio valido.' : `Provvisorio: servono almeno ${CURVE_MINIME} curve.`}
                   </div>
+                  <div className="rank">
+                    {referto.classifica !== null
+                      ? <>Punteggio classifica: <b>{referto.classifica}</b> (migliori {CURVE_CLASSIFICA} curve di fila)</>
+                      : `Per entrare in classifica con gli amici servono ${CURVE_CLASSIFICA} curve.`}
+                  </div>
                 </div>
               </div>
 
@@ -220,7 +228,7 @@ export default function App() {
               <div className="turns">
                 {referto.curve.map((c, i) => (
                   <button key={i} className="turn" onClick={() => vaiA(c.apice)}>
-                    <span className="tname">Curva {i + 1} a {c.lato} <small>{c.apice.toFixed(1)} s</small></span>
+                    <span className="tname">Curva {i + 1} a {c.lato} <small>{c.apice.toFixed(1)} s</small><em className="tscore">{referto.perCurva[i]}</em></span>
                     {referto.giudizi[i].map((g) => (
                       <span key={g.voce} className="chip" title={g.misura}>
                         <i style={{ background: COLORE[g.esito] }} />{g.voce}: {g.esito}
@@ -240,13 +248,14 @@ export default function App() {
           <h2>I tuoi progressi</h2>
           <Progressi storico={storico} />
           <table>
-            <thead><tr><th>Data</th><th>Carving Score</th><th>Curve</th><th>Ski:IQ Carv</th></tr></thead>
+            <thead><tr><th>Data</th><th>Carving Score</th><th>Curve</th><th>Classifica</th><th>Ski:IQ Carv</th></tr></thead>
             <tbody>
               {storico.map((s) => (
                 <tr key={s.data}>
                   <td>{new Date(s.data).toLocaleDateString('it-IT')}</td>
                   <td>{s.score ?? '–'}{s.valido === false ? ' (provv.)' : ''}</td>
                   <td>{s.curve}</td>
+                  <td>{s.classifica ?? '–'}</td>
                   <td>
                     <input className="iq" inputMode="numeric" placeholder="facoltativo" defaultValue={s.skiIq ?? ''}
                       aria-label="Ski:IQ di Carv della giornata"

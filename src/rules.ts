@@ -188,7 +188,8 @@ export const FASCE = [
   { min: 42, nome: 'Intermedio' },
   { min: 0, nome: 'In crescita' },
 ];
-export const CURVE_MINIME = 4;
+export const CURVE_MINIME = 4;        // Carving Score valido
+export const CURVE_CLASSIFICA = 5;    // punteggio per la classifica con gli amici
 
 /**
  * Carving Score 0-100: 70% i criteri del maestro, 30% le metriche degli sci.
@@ -200,6 +201,26 @@ export function carvingScore(p: { gruppo: Gruppo; punti: number }[], nCurve: num
   const score = Number.isNaN(s) ? m : Number.isNaN(m) ? s : 0.7 * m + 0.3 * s;
   const punti = Math.round(score);
   return { punti, fascia: FASCE.find((f) => punti >= f.min)!.nome, valido: nCurve >= CURVE_MINIME };
+}
+
+/** Punteggio di una singola curva, con lo stesso peso del Carving Score. */
+export function punteggioCurva(gs: Giudizio[]): number {
+  const v = (g: Gruppo) => avg(gs.filter((x) => x.gruppo === g).map((x) => PESO[x.esito]).filter((x) => !Number.isNaN(x)));
+  const m = v('maestro'), s = v('sci');
+  return Math.round(Number.isNaN(s) ? m : Number.isNaN(m) ? s : 0.7 * m + 0.3 * s);
+}
+
+/**
+ * Punteggio per la classifica: la media delle migliori 5 curve consecutive.
+ * Con meno di 5 curve non si entra in classifica.
+ */
+export function punteggioClassifica(perCurva: number[]): number | null {
+  if (perCurva.length < CURVE_CLASSIFICA) return null;
+  let best = -Infinity;
+  for (let i = 0; i + CURVE_CLASSIFICA <= perCurva.length; i++) {
+    best = Math.max(best, avg(perCurva.slice(i, i + CURVE_CLASSIFICA)));
+  }
+  return Math.round(best);
 }
 
 /** Le 2-3 correzioni più importanti: prima i criteri del maestro, poi le voci peggiori. */

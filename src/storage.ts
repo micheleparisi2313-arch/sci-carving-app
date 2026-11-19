@@ -6,6 +6,7 @@ export type VoceStorico = {
   curve: number;
   score?: number;          // Carving Score
   valido?: boolean;
+  classifica?: number;     // migliori 5 curve di fila: vale per la classifica con gli amici
   skiIq?: number;          // Ski:IQ di Carv della giornata, inserito a mano (facoltativo)
   punti: { voce: string; punti: number }[];
 };

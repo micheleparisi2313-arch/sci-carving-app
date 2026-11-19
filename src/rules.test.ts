@@ -25,3 +25,13 @@ describe('Carving Score', () => {
     expect(carvingScore([{ gruppo: 'maestro', punti: 80 }], 3).valido).toBe(false);
   });
 });
+
+import { punteggioClassifica } from './rules';
+describe('classifica', () => {
+  it('serve almeno 5 curve', () => {
+    expect(punteggioClassifica([80, 80, 80, 80])).toBeNull();
+  });
+  it('prende le migliori 5 curve di fila', () => {
+    expect(punteggioClassifica([20, 90, 90, 90, 90, 90, 20])).toBe(90);
+  });
+});
