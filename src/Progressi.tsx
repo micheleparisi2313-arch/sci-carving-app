@@ -16,10 +16,10 @@ export function Progressi({ storico }: { storico: VoceStorico[] }) {
           <text x={L - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">{v}</text>
         </g>
       ))}
-      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5" />
+      <path d={line} fill="none" stroke="var(--larice)" strokeWidth="2.5" />
       {pts.map((p, i) => (
         <g key={p.data}>
-          <circle cx={x(i)} cy={y(p.score!)} r="4" fill="var(--accent)" />
+          <circle cx={x(i)} cy={y(p.score!)} r="4" fill="var(--larice)" />
           <text x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill="var(--muted)">
             {new Date(p.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
           </text>

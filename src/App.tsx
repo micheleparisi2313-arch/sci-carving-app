@@ -6,6 +6,8 @@ import { CURVE_CLASSIFICA, CURVE_MINIME, carvingScore, punteggioClassifica, punt
 import { aggiornaSkiIq, caricaStorico, salvaNelloStorico, type VoceStorico } from './storage';
 import { condividi, creaClip } from './share';
 import { Progressi } from './Progressi';
+import { Traccia } from './Traccia';
+import { Guida } from './Guida';
 
 type Fase = 'scelta' | 'tocco' | 'analisi' | 'referto';
 
@@ -14,6 +16,12 @@ const COLORE: Record<Esito, string> = {
 };
 
 export default function App() {
+  const [guida, setGuida] = useState(() => location.hash === '#guida');
+  useEffect(() => {
+    const on = () => setGuida(location.hash === '#guida');
+    addEventListener('hashchange', on);
+    return () => removeEventListener('hashchange', on);
+  }, []);
   const [livello, setLivello] = useState<Livello>(() => (localStorage.getItem('livello') as Livello) || 'avanzato');
   const [fase, setFase] = useState<Fase>('scelta');
   const [url, setUrl] = useState<string | null>(null);
@@ -128,11 +136,14 @@ export default function App() {
 
   const vaiA = (t: number) => { const v = videoRef.current; if (v) { v.pause(); v.currentTime = t; } };
 
+  if (guida) return <Guida />;
+
   return (
     <main>
-      <header>
-        <h1>Sci Carving</h1>
-        <p className="sub">Carica una tua sciata e ricevi le correzioni sulla tecnica di carving.</p>
+      <header className="mast">
+        <p className="eyebrow">Metodo, cura, costanza.</p>
+        <h1>Sci <span>Carving</span></h1>
+        <p className="lede">Carica una tua sciata. Ricevi le correzioni del maestro, curva per curva.</p>
       </header>
 
       <section className="card">
@@ -147,17 +158,7 @@ export default function App() {
           <input type="file" accept="video/*" onChange={(e) => scegliFile(e.target.files?.[0])} />
           <span>{url ? 'Cambia video' : 'Scegli o registra un video'}</span>
         </label>
-        {fase === 'scelta' && (
-          <details>
-            <summary>Come filmare per un'analisi migliore</summary>
-            <ul>
-              <li>Telefono fermo, in verticale, senza zoom che cambia.</li>
-              <li>Lo sciatore deve occupare almeno un terzo dell'altezza dell'immagine.</li>
-              <li>Ripresa da davanti-sotto o da dietro per le spalle; di lato per il bacino.</li>
-              <li>4-8 curve, 10-20 secondi.</li>
-            </ul>
-          </details>
-        )}
+        <a className="guide-link" href="#guida">Come filmare per un punteggio valido</a>
       </section>
 
       {url && (
@@ -203,6 +204,8 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              <Traccia curve={referto.curve} punti={referto.perCurva} onSelect={vaiA} />
 
               {referto.top.length > 0 && (
                 <>
