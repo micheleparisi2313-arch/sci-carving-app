@@ -38,7 +38,8 @@ export function Guida() {
           <dt>Curve</dt><dd>Almeno 5 curve di fila per entrare in classifica (4 per avere il punteggio). Meglio 6-8.</dd>
           <dt>Pista</dt><dd>Battuta, pendenza media, con poca gente sullo sfondo: il programma potrebbe confondersi con altri sciatori.</dd>
           <dt>Luce</dt><dd>Sole alle spalle di chi filma o cielo coperto. Evita il controluce. Una tuta scura sulla neve si vede meglio.</dd>
-          <dt>Nell'app</dt><dd>Scorri fino al primo fotogramma in cui lo sciatore si vede bene e toccalo: l'analisi parte da lì.</dd>
+          <dt>Arco</dt><dd>Arco corto o arco medio: l'app lo riconosce dal ritmo delle curve, ma puoi sceglierlo tu prima di analizzare.</dd>
+          <dt>Nell'app</dt><dd>Scorri fino al primo fotogramma in cui lo sciatore si vede bene e toccalo: l'analisi parte da lì e legge fino a 25 secondi di sciata.</dd>
         </dl>
       </section>
 
