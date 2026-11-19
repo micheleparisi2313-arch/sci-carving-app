@@ -62,10 +62,10 @@ describe('taratura sul livello 7 (riferimento di Michele)', () => {
 });
 
 describe('arco corto e arco medio', () => {
-  const curva = (inizio: number) => ({ inizio, fine: inizio + 0.5 }) as unknown as Parameters<typeof riconosciArco>[0][number];
-  it('riconosce l\'arco dal ritmo', () => {
-    expect(riconosciArco([0, 0.8, 1.6, 2.4].map(curva))).toBe('corto');
-    expect(riconosciArco([0, 1.5, 3, 4.6].map(curva))).toBe('medio');
+  const curve = (durate: number[]) => durate.map((d, i) => ({ inizio: i * 2, fine: i * 2 + d })) as unknown as Parameters<typeof riconosciArco>[0];
+  it('riconosce l\'arco dalla durata delle curve (valori del livello 7)', () => {
+    expect(riconosciArco(curve([0.73, 0.73, 0.6, 0.6, 0.47, 0.6]))).toBe('corto');
+    expect(riconosciArco(curve([1.07, 0.93, 0.6, 1.53, 2.07]))).toBe('medio');
   });
   it('nell\'arco medio le spalle hanno più tolleranza', () => {
     expect(puntiSpalle(30, 65, 'medio')).toBeGreaterThan(puntiSpalle(30, 65, 'corto'));

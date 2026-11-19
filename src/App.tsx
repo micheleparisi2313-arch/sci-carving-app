@@ -100,6 +100,15 @@ export default function App() {
     return () => cancelAnimationFrame(raf);
   }, [fase, tap, analisi, url, referto]);
 
+  // iPhone (Safari) non disegna il video finché non parte o non viene spostato: resta nero.
+  // Lo avvio un attimo senza audio e lo fermo su un fotogramma, così lo sciatore si vede subito.
+  function mostraPrimoFotogramma(v: HTMLVideoElement) {
+    setDurata(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 1);
+    const ferma = () => { v.pause(); try { v.currentTime = Math.min(0.05, v.duration / 2 || 0); } catch { /* ignore */ } };
+    const p = v.play();
+    if (p && typeof p.then === 'function') p.then(ferma, ferma); else ferma();
+  }
+
   function scegliFile(f: File | undefined) {
     if (!f) return;
     if (url) URL.revokeObjectURL(url);
@@ -187,7 +196,7 @@ export default function App() {
       {url && (
         <section className="card">
           <div className="stage">
-            <video ref={videoRef} src={url} onLoadedMetadata={(e) => setDurata(e.currentTarget.duration || 1)} playsInline controls={fase !== 'tocco'} muted preload="auto" />
+            <video ref={videoRef} src={url} onLoadedMetadata={(e) => mostraPrimoFotogramma(e.currentTarget)} playsInline controls={fase !== 'tocco'} muted preload="auto" />
             <canvas ref={overlayRef} className={fase === 'tocco' ? 'tap' : 'over'} onPointerDown={tocca} />
           </div>
           {fase === 'tocco' && (
@@ -332,7 +341,7 @@ function pannello(ctx: CanvasRenderingContext2D, cw: number, ch: number, oy: num
   // in basso lascia spazio ai comandi del video
   const x = 10, y = banda ? Math.max(6, oy - h - 6) : sotto ? Math.max(10, ch - h - 64) : 10;
   ctx.fillStyle = 'rgba(15, 23, 20, 0.78)';
-  ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
+  ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, 10); else ctx.rect(x, y, w, h); ctx.fill(); // roundRect manca su Safari < 16.4
   ctx.fillStyle = '#ffffff'; ctx.font = '600 14px "Instrument Sans", system-ui, sans-serif'; ctx.textAlign = 'left';
   ctx.fillText(`Curva ${i + 1} a ${lato}`, x + 12, y + 22);
   ctx.textAlign = 'right'; ctx.fillStyle = '#e0913a'; ctx.font = '600 14px "IBM Plex Mono", monospace';

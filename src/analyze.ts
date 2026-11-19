@@ -10,8 +10,11 @@ const KEY = [11, 12, 23, 24, 25, 26, 27, 28];
 const visib = (p: Pose) => KEY.reduce((s, i) => s + p.pts[i].v, 0) / KEY.length;
 
 function seek(video: HTMLVideoElement, t: number): Promise<void> {
+  // Safari a volte non manda "seeked" (stesso istante, video non ancora caricato): non restare bloccati.
   return new Promise((res) => {
-    const done = () => { video.removeEventListener('seeked', done); res(); };
+    let fatto = false;
+    const done = () => { if (fatto) return; fatto = true; video.removeEventListener('seeked', done); clearTimeout(timer); res(); };
+    const timer = setTimeout(done, 2000);
     video.addEventListener('seeked', done);
     video.currentTime = t;
   });

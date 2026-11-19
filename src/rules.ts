@@ -55,12 +55,14 @@ export const SOGLIE_ARCO_MEDIO = {
   spalle: { ok: 12, attenzione: 25, perGradoGambe: { ok: 0.3, attenzione: 0.45 } },
   inclinazione: { avanzato: [50, 35, 62], intermedio: [40, 28, 52] } as Record<Livello, [number, number, number]>,
 };
-/** Durata tipica di mezza curva (da un cambio di spigolo al successivo) oltre la quale l'arco è medio. */
-export const SOGLIA_ARCO_MEDIO_S = 1.1;
+/** Durata mediana di una curva (da quando lo spigolo è caricato a quando si molla) oltre la quale l'arco è medio.
+ *  Livello 7: arco corto 0,5-0,7 s, arco medio 0,9-2,3 s. La durata è più robusta della distanza tra curve,
+ *  che salta quando il tracciamento perde una curva. */
+export const SOGLIA_ARCO_MEDIO_S = 0.85;
 
-/** Riconosce il tipo di arco dal ritmo: tempo mediano tra l'inizio di una curva e la successiva. */
+/** Riconosce il tipo di arco dal ritmo: durata mediana delle curve. */
 export function riconosciArco(curve: Curva[]): Arco {
-  const d = curve.length >= 2 ? curve.slice(1).map((c, i) => c.inizio - curve[i].inizio) : curve.map((c) => c.fine - c.inizio);
+  const d = curve.map((c) => c.fine - c.inizio);
   if (!d.length) return 'medio';
   return median(d) > SOGLIA_ARCO_MEDIO_S ? 'medio' : 'corto';
 }
