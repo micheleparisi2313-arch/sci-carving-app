@@ -23,16 +23,19 @@ export type Giudizio = { voce: string; gruppo: Gruppo; esito: Esito; punti: numb
 
 export const SOGLIE = {
   bustoSci: { ok: 50, attenzione: 65 },          // gradi (stima sperimentale, Michele: 49° era buono)
-  ginocchioMax: { attenzione: 155, errore: 165 }, // gradi
+  // gradi. Livello 7 (riferimento di Michele): in cambio di curva il ginocchio arriva a 145-165°
+  ginocchioMax: { attenzione: 160, errore: 172 },
   anca: { min: 95, max: 160 },                   // gradi
   // gradi dall'orizzontale; la tolleranza cresce con l'inclinazione delle gambe
   // (tarato con Michele sui video degli istruttori nazionali: spalle a 23-36° con gambe a 40-67° = "buono, quasi molto buono")
   spalle: { ok: 10, attenzione: 22, perGradoGambe: { ok: 0.25, attenzione: 0.4 } },
-  seduto: { ok: 15, attenzione: 40 },            // punteggio: anche dietro i piedi + busto-coscia chiuso
+  seduto: { ok: 25, attenzione: 50 },            // tarato sul livello 7            // punteggio: anche dietro i piedi + busto-coscia chiuso
   spigolo: { ok: 0.5, attenzione: 0.65 },        // frazione della curva
   ritmo: { ok: 0.25, attenzione: 0.4 },          // variazione della durata delle curve
-  inclinazione: { avanzato: [45, 30], intermedio: [35, 22] } as Record<Livello, [number, number]>, // gradi all'apice
-  tibie: { ok: 8, attenzione: 15 },              // gradi di differenza tra le tibie
+  // gradi all'apice: [ok, attenzione, top = 100 punti]. Livello 7: 45-50°
+  inclinazione: { avanzato: [40, 28, 50], intermedio: [32, 20, 42] } as Record<Livello, [number, number, number]>,
+  // gradi di differenza tra le tibie: da davanti la gamba interna è più piegata, livello 7 = 8-13°
+  tibie: { ok: 13, attenzione: 20 },
   flessione: { ok: 25, attenzione: 15 },         // gradi di escursione del ginocchio nella curva
   angolazione: { ok: 15, attenzione: 5 },        // gambe più inclinate del busto, in gradi
   simmetria: { ok: 10, attenzione: 20 },         // punti di differenza tra curve a destra e a sinistra
@@ -89,7 +92,9 @@ function grade(x: number, ok: number, att: number): Esito {
 /** Punti 0-100 quando "meno è meglio": alla soglia ok = 80, alla soglia di attenzione = 55. */
 export function puntiBasso(x: number, ok: number, att: number): number {
   const v = Math.max(0, x);
-  if (v <= ok) return 100 - 20 * (v / ok);
+  // fino a metà della soglia "ok" è perfetto: le misure dal video non distinguono di più
+  if (v <= ok / 2) return 100;
+  if (v <= ok) return 100 - 20 * ((v - ok / 2) / (ok / 2));
   if (v <= att) return 80 - 25 * ((v - ok) / (att - ok));
   return Math.max(10, 55 - 35 * ((v - att) / (att - ok)));
 }
@@ -99,8 +104,8 @@ export function puntiSpalle(spalle: number, gambe: number): number {
   return puntiBasso(spalle, ok + k.ok * gambe, attenzione + k.attenzione * gambe);
 }
 /** Punti 0-100 quando "più è meglio". */
-export function puntiAlto(x: number, ok: number, att: number): number {
-  if (x >= ok) return Math.min(100, 80 + 20 * ((x - ok) / ok));
+export function puntiAlto(x: number, ok: number, att: number, top = 2 * ok): number {
+  if (x >= ok) return Math.min(100, 80 + 20 * ((x - ok) / (top - ok)));
   if (x >= att) return 55 + 25 * ((x - att) / (ok - att));
   return Math.max(10, 55 - 35 * ((att - x) / (ok - att)));
 }
@@ -160,8 +165,8 @@ export function giudicaCurva(c: Curva, livello: Livello): Giudizio[] {
 
   // --- Le metriche degli sci (quelle di Carv), stimate dal corpo ---
   const incl = Math.abs(c.apiceFrame.gambeIncl);
-  const [iOk, iAtt] = SOGLIE.inclinazione[livello];
-  add('Angolo di spigolo', 'sci', 'inclinazione', puntiAlto(incl, iOk, iAtt), `gambe inclinate di ${incl.toFixed(0)}° all'apice`);
+  const [iOk, iAtt, iTop] = SOGLIE.inclinazione[livello];
+  add('Angolo di spigolo', 'sci', 'inclinazione', puntiAlto(incl, iOk, iAtt, iTop), `gambe inclinate di ${incl.toFixed(0)}° all'apice`);
 
   const tib = median(f.map((x) => x.tibieDiff));
   add('Sci paralleli', 'sci', 'tibie', lato ? null : puntiBasso(tib, SOGLIE.tibie.ok, SOGLIE.tibie.attenzione),

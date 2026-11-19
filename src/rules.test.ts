@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { angleAt, lineTilt } from './metrics';
-import { punteggioSeduto, puntiSpalle, giudizio7 } from './rules';
+import { punteggioSeduto, puntiSpalle, giudizio7, puntiBasso, puntiAlto, SOGLIE } from './rules';
 
 describe('misure', () => {
   it('angolo retto', () => {
@@ -46,5 +46,17 @@ describe('spalle in bolla, tarate sugli istruttori nazionali', () => {
   });
   it('con poca inclinazione resta severo', () => {
     expect(puntiSpalle(30, 10)).toBeLessThan(55);
+  });
+});
+
+describe('taratura sul livello 7 (riferimento di Michele)', () => {
+  it('fino a metà della soglia ok è perfetto', () => {
+    expect(puntiBasso(20, 50, 65)).toBe(100);
+    expect(puntiBasso(50, 50, 65)).toBe(80);
+  });
+  it('angolo di spigolo da livello 7 (45-50°) vale perfetto', () => {
+    const [ok, att, top] = SOGLIE.inclinazione.avanzato;
+    expect(puntiAlto(50, ok, att, top)).toBe(100);
+    expect(giudizio7(puntiAlto(48, ok, att, top))).toBe('perfetto');
   });
 });
