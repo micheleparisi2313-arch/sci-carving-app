@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { analizza, type Analisi } from './analyze';
 import { EDGES } from './pose';
 import { trovaCurve } from './turns';
-import { CURVE_CLASSIFICA, CURVE_MINIME, carvingScore, giudizio7, punteggioClassifica, punteggioCurva, giudicaCurva, giudicaRitmo, priorita, punteggi, simmetria, type Esito, type Giudizio, type Livello } from './rules';
+import { CURVE_CLASSIFICA, CURVE_MINIME, carvingScore, giudizio7, punteggioClassifica, punteggioCurva, giudicaCurva, giudicaRitmo, priorita, punteggi, riconosciArco, simmetria, type Arco, type Esito, type Giudizio, type Livello } from './rules';
 import { aggiornaSkiIq, caricaStorico, salvaNelloStorico, type VoceStorico } from './storage';
 import { condividi, creaClip } from './share';
 import { Progressi } from './Progressi';
@@ -23,6 +23,7 @@ export default function App() {
     return () => removeEventListener('hashchange', on);
   }, []);
   const [livello, setLivello] = useState<Livello>(() => (localStorage.getItem('livello') as Livello) || 'avanzato');
+  const [sceltaArco, setSceltaArco] = useState<'auto' | Arco>('auto');
   const [fase, setFase] = useState<Fase>('scelta');
   const [url, setUrl] = useState<string | null>(null);
   const [nome, setNome] = useState('');
@@ -41,15 +42,16 @@ export default function App() {
   const referto = useMemo(() => {
     if (!analisi) return null;
     const curve = trovaCurve(analisi.campioni);
-    const giudizi = curve.map((c) => giudicaCurva(c, livello));
+    const arco = sceltaArco === 'auto' ? riconosciArco(curve) : sceltaArco;
+    const giudizi = curve.map((c) => giudicaCurva(c, livello, arco));
     const punti = punteggi(giudizi);
     const perCurva = giudizi.map(punteggioCurva);
     return {
       perCurva, classifica: punteggioClassifica(perCurva),
       curve, giudizi, punti, ritmo: giudicaRitmo(curve), top: priorita(giudizi),
-      simm: simmetria(curve, giudizi), score: carvingScore(punti, curve.length),
+      simm: simmetria(curve, giudizi), score: carvingScore(punti, curve.length), arco,
     };
-  }, [analisi, livello]);
+  }, [analisi, livello, sceltaArco]);
 
   // disegna lo scheletro sopra il video, sincronizzato con il tempo
   useEffect(() => {
@@ -90,13 +92,22 @@ export default function App() {
           const t = v.currentTime;
           const i = referto.curve.findIndex((c) => t >= c.inizio - 0.15 && t <= c.fine + 0.15);
           // il pannello va dal lato opposto allo sciatore, per non coprirlo
-          if (i >= 0) pannello(ctx, cw, ch, skierY < ch / 2, i, referto.curve[i].lato, referto.perCurva[i], referto.giudizi[i]);
+          if (i >= 0) pannello(ctx, cw, ch, oy, skierY < ch / 2, i, referto.curve[i].lato, referto.perCurva[i], referto.giudizi[i]);
         }
       }
     };
     draw();
     return () => cancelAnimationFrame(raf);
   }, [fase, tap, analisi, url, referto]);
+
+  // iPhone (Safari) non disegna il video finché non parte o non viene spostato: resta nero.
+  // Lo avvio un attimo senza audio e lo fermo su un fotogramma, così lo sciatore si vede subito.
+  function mostraPrimoFotogramma(v: HTMLVideoElement) {
+    setDurata(Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 1);
+    const ferma = () => { v.pause(); try { v.currentTime = Math.min(0.05, v.duration / 2 || 0); } catch { /* ignore */ } };
+    const p = v.play();
+    if (p && typeof p.then === 'function') p.then(ferma, ferma); else ferma();
+  }
 
   function scegliFile(f: File | undefined) {
     if (!f) return;
@@ -124,9 +135,10 @@ export default function App() {
       setAnalisi(a); setFase('referto');
       videoRef.current.currentTime = tap.t;
       const curve = trovaCurve(a.campioni);
-      const p = punteggi(curve.map((c) => giudicaCurva(c, livello)));
+      const arco = sceltaArco === 'auto' ? riconosciArco(curve) : sceltaArco;
+      const p = punteggi(curve.map((c) => giudicaCurva(c, livello, arco)));
       const sc = carvingScore(p, curve.length);
-      const cl = punteggioClassifica(curve.map((c) => punteggioCurva(giudicaCurva(c, livello))));
+      const cl = punteggioClassifica(curve.map((c) => punteggioCurva(giudicaCurva(c, livello, arco))));
       setStorico(salvaNelloStorico({ data: new Date().toISOString(), nome, curve: curve.length, score: sc.punti, valido: sc.valido, classifica: cl ?? undefined, punti: p }));
     } catch (err) {
       setErrore(err instanceof Error ? err.message : String(err)); setFase('tocco');
@@ -166,6 +178,14 @@ export default function App() {
             <option value="intermedio">Intermedio</option>
           </select>
         </label>
+        <label className="row">
+          <span>Arco di curva</span>
+          <select value={sceltaArco} onChange={(e) => setSceltaArco(e.target.value as 'auto' | Arco)}>
+            <option value="auto">Riconosci dal video</option>
+            <option value="medio">Arco medio</option>
+            <option value="corto">Arco corto</option>
+          </select>
+        </label>
         <label className="file">
           <input type="file" accept="video/*" onChange={(e) => scegliFile(e.target.files?.[0])} />
           <span>{url ? 'Cambia video' : 'Scegli o registra un video'}</span>
@@ -176,7 +196,7 @@ export default function App() {
       {url && (
         <section className="card">
           <div className="stage">
-            <video ref={videoRef} src={url} onLoadedMetadata={(e) => setDurata(e.currentTarget.duration || 1)} playsInline controls={fase !== 'tocco'} muted preload="auto" />
+            <video ref={videoRef} src={url} onLoadedMetadata={(e) => mostraPrimoFotogramma(e.currentTarget)} playsInline controls={fase !== 'tocco'} muted preload="auto" />
             <canvas ref={overlayRef} className={fase === 'tocco' ? 'tap' : 'over'} onPointerDown={tocca} />
           </div>
           {fase === 'tocco' && (
@@ -207,7 +227,8 @@ export default function App() {
                   <div className="fascia">{referto.score.fascia}</div>
                   <div className="g7big">{giudizio7(referto.score.punti)}</div>
                   <div className="sub">
-                    {referto.curve.length} curve analizzate.{' '}
+                    {referto.curve.length} curve analizzate, arco {referto.arco}
+                    {sceltaArco === 'auto' ? ' (riconosciuto dal ritmo)' : ''}.{' '}
                     {referto.score.valido ? 'Punteggio valido.' : `Provvisorio: servono almeno ${CURVE_MINIME} curve.`}
                   </div>
                   <div className="rank">
@@ -312,13 +333,15 @@ function fit(v: HTMLVideoElement, w: number, h: number) {
 const TINTA: Record<string, string> = { ok: '#7fd39b', attenzione: '#f0a94e', 'da correggere': '#f08273', 'non valutabile': '#9aa3a0' };
 
 /** Riquadro sopra il video: giudizio a 7 livelli e punti per ogni criterio della curva in corso. */
-function pannello(ctx: CanvasRenderingContext2D, cw: number, ch: number, sotto: boolean, i: number, lato: string, punti: number, gs: Giudizio[]) {
+function pannello(ctx: CanvasRenderingContext2D, cw: number, ch: number, oy: number, sotto: boolean, i: number, lato: string, punti: number, gs: Giudizio[]) {
   const righe = gs.filter((g) => g.esito !== 'non valutabile');
-  const rh = 19, h = 46 + righe.length * rh, w = Math.min(cw - 20, 300);
+  // video orizzontale: il pannello va nella banda nera sopra il video, più compatto, così non copre la sciata
+  const banda = oy > 150;
+  const rh = banda ? 17 : 19, h = 46 + righe.length * rh, w = Math.min(cw - 20, 300);
   // in basso lascia spazio ai comandi del video
-  const x = 10, y = sotto ? Math.max(10, ch - h - 64) : 10;
+  const x = 10, y = banda ? Math.max(6, oy - h - 6) : sotto ? Math.max(10, ch - h - 64) : 10;
   ctx.fillStyle = 'rgba(15, 23, 20, 0.78)';
-  ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
+  ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, 10); else ctx.rect(x, y, w, h); ctx.fill(); // roundRect manca su Safari < 16.4
   ctx.fillStyle = '#ffffff'; ctx.font = '600 14px "Instrument Sans", system-ui, sans-serif'; ctx.textAlign = 'left';
   ctx.fillText(`Curva ${i + 1} a ${lato}`, x + 12, y + 22);
   ctx.textAlign = 'right'; ctx.fillStyle = '#e0913a'; ctx.font = '600 14px "IBM Plex Mono", monospace';

@@ -29,7 +29,7 @@ export const SOGLIE = {
   // gradi dall'orizzontale; la tolleranza cresce con l'inclinazione delle gambe
   // (tarato con Michele sui video degli istruttori nazionali: spalle a 23-36° con gambe a 40-67° = "buono, quasi molto buono")
   spalle: { ok: 10, attenzione: 22, perGradoGambe: { ok: 0.25, attenzione: 0.4 } },
-  seduto: { ok: 25, attenzione: 50 },            // tarato sul livello 7            // punteggio: anche dietro i piedi + busto-coscia chiuso
+  seduto: { ok: 25, attenzione: 50 },            // punteggio: anche dietro i piedi + busto-coscia chiuso (tarato sul livello 7)
   spigolo: { ok: 0.5, attenzione: 0.65 },        // frazione della curva
   ritmo: { ok: 0.25, attenzione: 0.4 },          // variazione della durata delle curve
   // gradi all'apice: [ok, attenzione, top = 100 punti]. Livello 7: 45-50°
@@ -41,6 +41,35 @@ export const SOGLIE = {
   angolazione: { ok: 15, attenzione: 5 },        // gambe più inclinate del busto, in gradi
   simmetria: { ok: 10, attenzione: 20 },         // punti di differenza tra curve a destra e a sinistra
 };
+
+/**
+ * Tipo di arco. Michele: due parametri diversi per arco corto e arco medio.
+ * L'arco medio è il riferimento principale (livello 7: gambe a 60-69°, ginocchio fino a 170° in cambio curva).
+ * Le soglie qui sotto sostituiscono quelle di SOGLIE per l'arco medio; l'arco corto usa SOGLIE così com'è.
+ */
+export type Arco = 'corto' | 'medio';
+export const SOGLIE_ARCO_MEDIO = {
+  ginocchioMax: { attenzione: 170, errore: 180 },
+  anca: { min: 85, max: 165 },
+  seduto: { ok: 45, attenzione: 70 },
+  spalle: { ok: 12, attenzione: 25, perGradoGambe: { ok: 0.3, attenzione: 0.45 } },
+  inclinazione: { avanzato: [50, 35, 62], intermedio: [40, 28, 52] } as Record<Livello, [number, number, number]>,
+};
+/** Durata mediana di una curva (da quando lo spigolo è caricato a quando si molla) oltre la quale l'arco è medio.
+ *  Livello 7: arco corto 0,5-0,7 s, arco medio 0,9-2,3 s. La durata è più robusta della distanza tra curve,
+ *  che salta quando il tracciamento perde una curva. */
+export const SOGLIA_ARCO_MEDIO_S = 0.85;
+
+/** Riconosce il tipo di arco dal ritmo: durata mediana delle curve. */
+export function riconosciArco(curve: Curva[]): Arco {
+  const d = curve.map((c) => c.fine - c.inizio);
+  if (!d.length) return 'medio';
+  return median(d) > SOGLIA_ARCO_MEDIO_S ? 'medio' : 'corto';
+}
+
+export function soglie(arco: Arco) {
+  return arco === 'medio' ? { ...SOGLIE, ...SOGLIE_ARCO_MEDIO } : SOGLIE;
+}
 
 const median = (a: number[]) => {
   const s = [...a].sort((x, y) => x - y);
@@ -100,8 +129,8 @@ export function puntiBasso(x: number, ok: number, att: number): number {
   return Math.max(10, 55 - 35 * ((v - att) / (att - ok)));
 }
 /** Spalle in bolla: più le gambe sono inclinate, più tolleranza sulle spalle. */
-export function puntiSpalle(spalle: number, gambe: number): number {
-  const { ok, attenzione, perGradoGambe: k } = SOGLIE.spalle;
+export function puntiSpalle(spalle: number, gambe: number, arco: Arco = 'corto'): number {
+  const { ok, attenzione, perGradoGambe: k } = soglie(arco).spalle;
   return puntiBasso(spalle, ok + k.ok * gambe, attenzione + k.attenzione * gambe);
 }
 /** Punti 0-100 quando "più è meglio". */
@@ -129,7 +158,8 @@ export function punteggioSeduto(ancheAvanti: number, anca: number): number {
   return -ancheAvanti + Math.max(0, 110 - anca) * 0.5;
 }
 
-export function giudicaCurva(c: Curva, livello: Livello): Giudizio[] {
+export function giudicaCurva(c: Curva, livello: Livello, arco: Arco = 'corto'): Giudizio[] {
+  const S = soglie(arco);
   const f = c.frames;
   const viste = f.map((x) => x.vista);
   const lato = viste.filter((v) => v === 'lato').length > f.length / 2;
@@ -148,25 +178,25 @@ export function giudicaCurva(c: Curva, livello: Livello): Giudizio[] {
   const ginocchi = f.map((x) => x.ginocchio);
   const gMax = Math.max(...ginocchi);
   const an = median(f.map((x) => x.anca));
-  const pG = puntiBasso(gMax - 120, SOGLIE.ginocchioMax.attenzione - 120, SOGLIE.ginocchioMax.errore - 120);
-  const fuori = an < SOGLIE.anca.min ? SOGLIE.anca.min - an : an > SOGLIE.anca.max ? an - SOGLIE.anca.max : 0;
+  const pG = puntiBasso(gMax - 120, S.ginocchioMax.attenzione - 120, S.ginocchioMax.errore - 120);
+  const fuori = an < S.anca.min ? S.anca.min - an : an > S.anca.max ? an - S.anca.max : 0;
   const pA = fuori === 0 ? 90 : Math.max(10, 80 - fuori * 2.5);
   add('Posizione pronta', 'maestro', 'posizione', Math.min(pG, pA), `ginocchio fino a ${gMax.toFixed(0)}°, busto-coscia ${an.toFixed(0)}°`);
 
   const sp = Math.abs(c.apiceFrame.spalleIncl);
-  add('Spalle in bolla', 'maestro', 'spalle', lato ? null : puntiSpalle(sp, Math.abs(c.apiceFrame.gambeIncl)),
+  add('Spalle in bolla', 'maestro', 'spalle', lato ? null : puntiSpalle(sp, Math.abs(c.apiceFrame.gambeIncl), arco),
     lato ? 'ripresa di lato' : `spalle inclinate di ${sp.toFixed(0)}°`);
 
   add('Tempismo di curva', 'maestro', 'tempismo', puntiBasso(c.costruzioneSpigolo, SOGLIE.spigolo.ok, SOGLIE.spigolo.attenzione),
     `spigolo pieno al ${(c.costruzioneSpigolo * 100).toFixed(0)}% della curva`);
 
   const sed = punteggioSeduto(median(f.map((x) => x.ancheAvanti)), an);
-  add('Bacino sopra i piedi', 'maestro', 'seduto', fronte ? null : puntiBasso(sed, SOGLIE.seduto.ok, SOGLIE.seduto.attenzione),
-    fronte ? 'ripresa esattamente frontale' : sed > SOGLIE.seduto.ok ? 'bacino dietro i piedi' : 'bacino sopra i piedi');
+  add('Bacino sopra i piedi', 'maestro', 'seduto', fronte ? null : puntiBasso(sed, S.seduto.ok, S.seduto.attenzione),
+    fronte ? 'ripresa esattamente frontale' : sed > S.seduto.ok ? 'bacino dietro i piedi' : 'bacino sopra i piedi');
 
   // --- Le metriche degli sci (quelle di Carv), stimate dal corpo ---
   const incl = Math.abs(c.apiceFrame.gambeIncl);
-  const [iOk, iAtt, iTop] = SOGLIE.inclinazione[livello];
+  const [iOk, iAtt, iTop] = S.inclinazione[livello];
   add('Angolo di spigolo', 'sci', 'inclinazione', puntiAlto(incl, iOk, iAtt, iTop), `gambe inclinate di ${incl.toFixed(0)}° all'apice`);
 
   const tib = median(f.map((x) => x.tibieDiff));
