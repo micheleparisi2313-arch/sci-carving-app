@@ -114,3 +114,6 @@ td { font-family: var(--mono); }
 .due { padding-left: 20px; margin: 0 0 8px; } .due li { margin-bottom: 6px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.g7 { display: block; font: 500 11px var(--mono); color: var(--larice); text-transform: lowercase; }
+.g7big { font: 500 13px var(--mono); color: var(--roccia); }
+.score { grid-template-columns: minmax(0, 160px) 1fr 34px; }

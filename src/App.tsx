@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { analizza, type Analisi } from './analyze';
 import { EDGES } from './pose';
 import { trovaCurve } from './turns';
-import { CURVE_CLASSIFICA, CURVE_MINIME, carvingScore, punteggioClassifica, punteggioCurva, giudicaCurva, giudicaRitmo, priorita, punteggi, simmetria, type Esito, type Livello } from './rules';
+import { CURVE_CLASSIFICA, CURVE_MINIME, carvingScore, giudizio7, punteggioClassifica, punteggioCurva, giudicaCurva, giudicaRitmo, priorita, punteggi, simmetria, type Esito, type Giudizio, type Livello } from './rules';
 import { aggiornaSkiIq, caricaStorico, salvaNelloStorico, type VoceStorico } from './storage';
 import { condividi, creaClip } from './share';
 import { Progressi } from './Progressi';
@@ -59,10 +59,13 @@ export default function App() {
     const draw = () => {
       raf = requestAnimationFrame(draw);
       const r = v.getBoundingClientRect();
-      if (c.width !== Math.round(r.width) || c.height !== Math.round(r.height)) { c.width = Math.round(r.width); c.height = Math.round(r.height); }
+      const dpr = window.devicePixelRatio || 1;
+      const cw = Math.round(r.width), ch = Math.round(r.height);
+      if (c.width !== Math.round(cw * dpr) || c.height !== Math.round(ch * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
       const ctx = c.getContext('2d')!;
-      ctx.clearRect(0, 0, c.width, c.height);
-      const { s, ox, oy } = fit(v, c);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cw, ch);
+      const { s, ox, oy } = fit(v, cw, ch);
       if (fase === 'tocco' && tap && Math.abs(v.currentTime - tap.t) < 0.05) {
         ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(ox + tap.x * s, oy + tap.y * s, 22, 0, Math.PI * 2); ctx.stroke();
@@ -80,11 +83,17 @@ export default function App() {
           ctx.fillStyle = '#ff3b30';
           for (let i = 11; i < 33; i++) { ctx.beginPath(); ctx.arc(ox + p[i].x * s, oy + p[i].y * s, 3.5, 0, Math.PI * 2); ctx.fill(); }
         }
+        // giudizi in tempo reale sulla curva in corso
+        if (referto) {
+          const t = v.currentTime;
+          const i = referto.curve.findIndex((c) => t >= c.inizio - 0.15 && t <= c.fine + 0.15);
+          if (i >= 0) pannello(ctx, cw, i, referto.curve[i].lato, referto.perCurva[i], referto.giudizi[i]);
+        }
       }
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [fase, tap, analisi, url]);
+  }, [fase, tap, analisi, url, referto]);
 
   function scegliFile(f: File | undefined) {
     if (!f) return;
@@ -98,7 +107,7 @@ export default function App() {
     const v = videoRef.current!, c = overlayRef.current!;
     v.pause();
     const r = c.getBoundingClientRect();
-    const { s, ox, oy } = fit(v, c);
+    const { s, ox, oy } = fit(v, r.width, r.height);
     const x = (e.clientX - r.left - ox) / s, y = (e.clientY - r.top - oy) / s;
     if (x < 0 || y < 0 || x > v.videoWidth || y > v.videoHeight) return;
     setTap({ x, y, t: v.currentTime });
@@ -193,6 +202,7 @@ export default function App() {
                 <div>
                   <div className="label">Carving Score</div>
                   <div className="fascia">{referto.score.fascia}</div>
+                  <div className="g7big">{giudizio7(referto.score.punti)}</div>
                   <div className="sub">
                     {referto.curve.length} curve analizzate.{' '}
                     {referto.score.valido ? 'Punteggio valido.' : `Provvisorio: servono almeno ${CURVE_MINIME} curve.`}
@@ -231,10 +241,10 @@ export default function App() {
               <div className="turns">
                 {referto.curve.map((c, i) => (
                   <button key={i} className="turn" onClick={() => vaiA(c.apice)}>
-                    <span className="tname">Curva {i + 1} a {c.lato} <small>{c.apice.toFixed(1)} s</small><em className="tscore">{referto.perCurva[i]}</em></span>
+                    <span className="tname">Curva {i + 1} a {c.lato} <small>{c.apice.toFixed(1)} s</small><em className="tscore">{giudizio7(referto.perCurva[i])} {referto.perCurva[i]}</em></span>
                     {referto.giudizi[i].map((g) => (
                       <span key={g.voce} className="chip" title={g.misura}>
-                        <i style={{ background: COLORE[g.esito] }} />{g.voce}: {g.esito}
+                        <i style={{ background: COLORE[g.esito] }} />{g.voce}: {giudizio7(g.punti)}{Number.isNaN(g.punti) ? '' : ` ${g.punti}`}
                       </span>
                     ))}
                   </button>
@@ -280,7 +290,7 @@ function Barre({ punti }: { punti: { voce: string; punti: number }[] }) {
     <div className="scores">
       {punti.map((p) => (
         <div key={p.voce} className="score">
-          <span>{p.voce}</span>
+          <span>{p.voce}<small className="g7">{giudizio7(p.punti)}</small></span>
           <div className="bar"><div style={{ width: `${Number.isNaN(p.punti) ? 0 : p.punti}%` }} /></div>
           <b>{Number.isNaN(p.punti) ? '–' : p.punti}</b>
         </div>
@@ -290,8 +300,31 @@ function Barre({ punti }: { punti: { voce: string; punti: number }[] }) {
 }
 
 /** Scala e margini del video dentro il suo riquadro (object-fit: contain). */
-function fit(v: HTMLVideoElement, c: HTMLCanvasElement) {
+function fit(v: HTMLVideoElement, w: number, h: number) {
   const vw = v.videoWidth || 1, vh = v.videoHeight || 1;
-  const s = Math.min(c.width / vw, c.height / vh);
-  return { s, ox: (c.width - vw * s) / 2, oy: (c.height - vh * s) / 2 };
+  const s = Math.min(w / vw, h / vh);
+  return { s, ox: (w - vw * s) / 2, oy: (h - vh * s) / 2 };
+}
+
+const TINTA: Record<string, string> = { ok: '#7fd39b', attenzione: '#f0a94e', 'da correggere': '#f08273', 'non valutabile': '#9aa3a0' };
+
+/** Riquadro sopra il video: giudizio a 7 livelli e punti per ogni criterio della curva in corso. */
+function pannello(ctx: CanvasRenderingContext2D, cw: number, i: number, lato: string, punti: number, gs: Giudizio[]) {
+  const righe = gs.filter((g) => g.esito !== 'non valutabile');
+  const x = 10, y = 10, w = Math.min(cw - 20, 300), rh = 19, h = 46 + righe.length * rh;
+  ctx.fillStyle = 'rgba(15, 23, 20, 0.78)';
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.font = '600 14px "Instrument Sans", system-ui, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(`Curva ${i + 1} a ${lato}`, x + 12, y + 22);
+  ctx.textAlign = 'right'; ctx.fillStyle = '#e0913a'; ctx.font = '600 14px "IBM Plex Mono", monospace';
+  ctx.fillText(`${giudizio7(punti)} ${punti}`, x + w - 12, y + 22);
+  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.moveTo(x + 12, y + 32); ctx.lineTo(x + w - 12, y + 32); ctx.stroke();
+  righe.forEach((g, k) => {
+    const yy = y + 50 + k * rh;
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,.88)'; ctx.font = '12px "Instrument Sans", system-ui, sans-serif';
+    ctx.fillText(g.voce, x + 12, yy);
+    ctx.textAlign = 'right'; ctx.fillStyle = TINTA[g.esito]; ctx.font = '500 12px "IBM Plex Mono", monospace';
+    ctx.fillText(`${giudizio7(g.punti)} ${g.punti}`, x + w - 12, yy);
+  });
+  ctx.textAlign = 'left';
 }

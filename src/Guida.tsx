@@ -14,17 +14,18 @@ export function Guida() {
 
       <section className="card">
         <h2>La ripresa standard</h2>
-        <p>Chi filma sta <b>fermo, a valle dello sciatore e un po' di lato</b> (di tre quarti), a 15-30 metri.
-          Lo sciatore scende verso di lui facendo almeno 5 curve di fila, senza fermarsi.</p>
-        <svg className="schema" viewBox="0 0 320 200" role="img" aria-label="Chi filma sta a valle, di tre quarti rispetto alla traccia">
+        <p>Si filma <b>da davanti</b>: chi filma sta <b>fermo, a valle, sulla linea di discesa dello sciatore</b>, a 15-30 metri.
+          Lo sciatore scende verso di lui facendo almeno 5 curve di fila, senza fermarsi.
+          Da davanti si vedono bene spalle, busto, ginocchia e sci: i criteri più importanti del referto.</p>
+        <svg className="schema" viewBox="0 0 320 200" role="img" aria-label="Chi filma sta a valle, di fronte allo sciatore">
           <text x="160" y="16" textAnchor="middle" className="s-lab">monte</text>
           <path d="M150 30 C110 55 190 75 150 100 C110 125 190 145 150 170" className="s-traccia" />
           <path d="M156 30 C116 55 196 75 156 100 C116 125 196 145 156 170" className="s-traccia" />
-          <circle cx="252" cy="178" r="7" className="s-cam" />
-          <path d="M246 172 L172 120" className="s-vista" />
-          <path d="M248 170 L214 92" className="s-vista" />
-          <text x="252" y="198" textAnchor="middle" className="s-lab">chi filma</text>
-          <text x="104" y="104" textAnchor="end" className="s-lab">5+ curve</text>
+          <circle cx="153" cy="186" r="7" className="s-cam" />
+          <path d="M147 179 L104 40" className="s-vista" />
+          <path d="M159 179 L202 40" className="s-vista" />
+          <text x="200" y="190" className="s-lab">chi filma</text>
+          <text x="96" y="104" textAnchor="end" className="s-lab">5+ curve</text>
         </svg>
       </section>
 
@@ -42,11 +43,11 @@ export function Guida() {
       </section>
 
       <section className="card">
-        <h2>Due riprese, quando vuoi il referto completo</h2>
-        <p>Alcuni criteri si vedono meglio da un lato preciso.</p>
+        <h2>Una seconda ripresa, se vuoi il referto completo</h2>
+        <p>La ripresa da davanti è lo standard, e vale per la classifica. Una ripresa di lato in più aiuta su due criteri.</p>
         <ul className="due">
-          <li><b>Da valle, di fronte</b>: spalle in bolla, busto verso gli sci, sci paralleli.</li>
-          <li><b>Di lato</b>: bacino sopra i piedi, posizione pronta, flesso-estensione.</li>
+          <li><b>Da davanti (standard)</b>: spalle in bolla, busto verso gli sci, sci paralleli, angolo di spigolo, tempismo.</li>
+          <li><b>Di lato (facoltativa)</b>: bacino sopra i piedi e posizione pronta, che di lato si leggono meglio.</li>
         </ul>
         <p className="note">Quando un criterio non si può giudicare da quell'angolo, il referto lo scrive invece di indovinare.</p>
       </section>
