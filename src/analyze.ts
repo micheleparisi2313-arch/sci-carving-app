@@ -9,13 +9,25 @@ export type Analisi = { campioni: (Campione & { pose: Pose | null })[]; fps: num
 const KEY = [11, 12, 23, 24, 25, 26, 27, 28];
 const visib = (p: Pose) => KEY.reduce((s, i) => s + p.pts[i].v, 0) / KEY.length;
 
+// iPhone/iPad (qualsiasi browser, sono tutti WebKit) e Safari su Mac
+const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+const WEBKIT = /iPad|iPhone|iPod/.test(ua) || (/Safari\//.test(ua) && !/Chrome|Chromium|Android|Edg\//.test(ua));
+
 function seek(video: HTMLVideoElement, t: number): Promise<void> {
   // Safari a volte non manda "seeked" (stesso istante, video non ancora caricato): non restare bloccati.
   return new Promise((res) => {
     let fatto = false;
-    const done = () => { if (fatto) return; fatto = true; video.removeEventListener('seeked', done); clearTimeout(timer); res(); };
+    const done = () => { if (fatto) return; fatto = true; clearTimeout(timer); res(); };
     const timer = setTimeout(done, 2000);
-    video.addEventListener('seeked', done);
+    // Safari su iPhone segnala "seeked" prima di avere il nuovo fotogramma pronto per il canvas:
+    // aspetto che il fotogramma venga davvero presentato (con un tetto di tempo).
+    const v = video as HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number };
+    const onSeeked = () => {
+      if (!WEBKIT || !v.requestVideoFrameCallback) return done();
+      v.requestVideoFrameCallback(() => done());
+      setTimeout(done, 150);
+    };
+    video.addEventListener('seeked', onSeeked, { once: true });
     video.currentTime = t;
   });
 }

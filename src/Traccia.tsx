@@ -19,7 +19,7 @@ export function Traccia({ curve, punti, onSelect }: { curve: Curva[]; punti: num
   };
   return (
     <figure className="traccia">
-      <figcaption>La tua traccia · {n} curve</figcaption>
+      <figcaption>La tua traccia · {n} {n === 1 ? "curva" : "curve"}</figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Traccia di ${n} curve con il punteggio di ciascuna`}>
         {curve.map((c, i) => {
           const p = punti[i];
