@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { angleAt, lineTilt } from './metrics';
-import { punteggioSeduto } from './rules';
+import { punteggioSeduto, puntiSpalle, giudizio7 } from './rules';
 
 describe('misure', () => {
   it('angolo retto', () => {
@@ -33,5 +33,18 @@ describe('classifica', () => {
   });
   it('prende le migliori 5 curve di fila', () => {
     expect(punteggioClassifica([20, 90, 90, 90, 90, 90, 20])).toBe(90);
+  });
+});
+
+describe('spalle in bolla, tarate sugli istruttori nazionali', () => {
+  it('a forte inclinazione le spalle a 23-36° sono "buono, quasi molto buono"', () => {
+    const p = [puntiSpalle(36, 63), puntiSpalle(29, 67), puntiSpalle(23, 44), puntiSpalle(35, 39)];
+    const media = p.reduce((a, b) => a + b, 0) / p.length;
+    expect(media).toBeGreaterThanOrEqual(65);
+    expect(media).toBeLessThan(75);
+    expect(giudizio7(media)).toBe('buono');
+  });
+  it('con poca inclinazione resta severo', () => {
+    expect(puntiSpalle(30, 10)).toBeLessThan(55);
   });
 });

@@ -25,7 +25,9 @@ export const SOGLIE = {
   bustoSci: { ok: 50, attenzione: 65 },          // gradi (stima sperimentale, Michele: 49° era buono)
   ginocchioMax: { attenzione: 155, errore: 165 }, // gradi
   anca: { min: 95, max: 160 },                   // gradi
-  spalle: { ok: 12, attenzione: 22 },            // gradi dall'orizzontale
+  // gradi dall'orizzontale; la tolleranza cresce con l'inclinazione delle gambe
+  // (tarato con Michele sui video degli istruttori nazionali: spalle a 23-36° con gambe a 40-67° = "buono, quasi molto buono")
+  spalle: { ok: 10, attenzione: 22, perGradoGambe: { ok: 0.25, attenzione: 0.4 } },
   seduto: { ok: 15, attenzione: 40 },            // punteggio: anche dietro i piedi + busto-coscia chiuso
   spigolo: { ok: 0.5, attenzione: 0.65 },        // frazione della curva
   ritmo: { ok: 0.25, attenzione: 0.4 },          // variazione della durata delle curve
@@ -91,6 +93,11 @@ export function puntiBasso(x: number, ok: number, att: number): number {
   if (v <= att) return 80 - 25 * ((v - ok) / (att - ok));
   return Math.max(10, 55 - 35 * ((v - att) / (att - ok)));
 }
+/** Spalle in bolla: più le gambe sono inclinate, più tolleranza sulle spalle. */
+export function puntiSpalle(spalle: number, gambe: number): number {
+  const { ok, attenzione, perGradoGambe: k } = SOGLIE.spalle;
+  return puntiBasso(spalle, ok + k.ok * gambe, attenzione + k.attenzione * gambe);
+}
 /** Punti 0-100 quando "più è meglio". */
 export function puntiAlto(x: number, ok: number, att: number): number {
   if (x >= ok) return Math.min(100, 80 + 20 * ((x - ok) / ok));
@@ -141,7 +148,7 @@ export function giudicaCurva(c: Curva, livello: Livello): Giudizio[] {
   add('Posizione pronta', 'maestro', 'posizione', Math.min(pG, pA), `ginocchio fino a ${gMax.toFixed(0)}°, busto-coscia ${an.toFixed(0)}°`);
 
   const sp = Math.abs(c.apiceFrame.spalleIncl);
-  add('Spalle in bolla', 'maestro', 'spalle', lato ? null : puntiBasso(sp, SOGLIE.spalle.ok, SOGLIE.spalle.attenzione),
+  add('Spalle in bolla', 'maestro', 'spalle', lato ? null : puntiSpalle(sp, Math.abs(c.apiceFrame.gambeIncl)),
     lato ? 'ripresa di lato' : `spalle inclinate di ${sp.toFixed(0)}°`);
 
   add('Tempismo di curva', 'maestro', 'tempismo', puntiBasso(c.costruzioneSpigolo, SOGLIE.spigolo.ok, SOGLIE.spigolo.attenzione),

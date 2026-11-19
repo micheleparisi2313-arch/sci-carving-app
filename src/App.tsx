@@ -74,8 +74,10 @@ export default function App() {
         const cs = analisi.campioni;
         let best = null as (typeof cs)[number] | null;
         for (const x of cs) if (!best || Math.abs(x.t - v.currentTime) < Math.abs(best.t - v.currentTime)) best = x;
+        let skierY = NaN;
         if (best?.pose && Math.abs(best.t - v.currentTime) < 0.15) {
           const p = best.pose.pts;
+          skierY = oy + ((p[23].y + p[24].y) / 2) * s;
           ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 3;
           for (const [a, b] of EDGES) {
             ctx.beginPath(); ctx.moveTo(ox + p[a].x * s, oy + p[a].y * s); ctx.lineTo(ox + p[b].x * s, oy + p[b].y * s); ctx.stroke();
@@ -87,7 +89,8 @@ export default function App() {
         if (referto) {
           const t = v.currentTime;
           const i = referto.curve.findIndex((c) => t >= c.inizio - 0.15 && t <= c.fine + 0.15);
-          if (i >= 0) pannello(ctx, cw, i, referto.curve[i].lato, referto.perCurva[i], referto.giudizi[i]);
+          // il pannello va dal lato opposto allo sciatore, per non coprirlo
+          if (i >= 0) pannello(ctx, cw, ch, skierY < ch / 2, i, referto.curve[i].lato, referto.perCurva[i], referto.giudizi[i]);
         }
       }
     };
@@ -309,9 +312,11 @@ function fit(v: HTMLVideoElement, w: number, h: number) {
 const TINTA: Record<string, string> = { ok: '#7fd39b', attenzione: '#f0a94e', 'da correggere': '#f08273', 'non valutabile': '#9aa3a0' };
 
 /** Riquadro sopra il video: giudizio a 7 livelli e punti per ogni criterio della curva in corso. */
-function pannello(ctx: CanvasRenderingContext2D, cw: number, i: number, lato: string, punti: number, gs: Giudizio[]) {
+function pannello(ctx: CanvasRenderingContext2D, cw: number, ch: number, sotto: boolean, i: number, lato: string, punti: number, gs: Giudizio[]) {
   const righe = gs.filter((g) => g.esito !== 'non valutabile');
-  const x = 10, y = 10, w = Math.min(cw - 20, 300), rh = 19, h = 46 + righe.length * rh;
+  const rh = 19, h = 46 + righe.length * rh, w = Math.min(cw - 20, 300);
+  // in basso lascia spazio ai comandi del video
+  const x = 10, y = sotto ? Math.max(10, ch - h - 64) : 10;
   ctx.fillStyle = 'rgba(15, 23, 20, 0.78)';
   ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
   ctx.fillStyle = '#ffffff'; ctx.font = '600 14px "Instrument Sans", system-ui, sans-serif'; ctx.textAlign = 'left';
