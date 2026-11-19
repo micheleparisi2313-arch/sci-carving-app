@@ -19,13 +19,15 @@ export type Curva = {
   costruzioneSpigolo: number; // 0..1: quando l'inclinazione arriva al 70% del massimo (presto = basso)
 };
 
-export type Giudizio = { voce: string; gruppo: Gruppo; esito: Esito; misura: string; consiglio?: string };
+export type Giudizio = { voce: string; gruppo: Gruppo; esito: Esito; punti: number; misura: string; consiglio?: string };
 
 export const SOGLIE = {
   bustoSci: { ok: 50, attenzione: 65 },          // gradi (stima sperimentale, Michele: 49° era buono)
   ginocchioMax: { attenzione: 155, errore: 165 }, // gradi
   anca: { min: 95, max: 160 },                   // gradi
-  spalle: { ok: 12, attenzione: 22 },            // gradi dall'orizzontale
+  // gradi dall'orizzontale; la tolleranza cresce con l'inclinazione delle gambe
+  // (tarato con Michele sui video degli istruttori nazionali: spalle a 23-36° con gambe a 40-67° = "buono, quasi molto buono")
+  spalle: { ok: 10, attenzione: 22, perGradoGambe: { ok: 0.25, attenzione: 0.4 } },
   seduto: { ok: 15, attenzione: 40 },            // punteggio: anche dietro i piedi + busto-coscia chiuso
   spigolo: { ok: 0.5, attenzione: 0.65 },        // frazione della curva
   ritmo: { ok: 0.25, attenzione: 0.4 },          // variazione della durata delle curve
@@ -83,9 +85,38 @@ const TESTI: Record<string, Record<Livello, string>> = {
 function grade(x: number, ok: number, att: number): Esito {
   return x <= ok ? 'ok' : x <= att ? 'attenzione' : 'da correggere';
 }
-function gradeAlto(x: number, ok: number, att: number): Esito {
-  return x >= ok ? 'ok' : x >= att ? 'attenzione' : 'da correggere';
+
+/** Punti 0-100 quando "meno è meglio": alla soglia ok = 80, alla soglia di attenzione = 55. */
+export function puntiBasso(x: number, ok: number, att: number): number {
+  const v = Math.max(0, x);
+  if (v <= ok) return 100 - 20 * (v / ok);
+  if (v <= att) return 80 - 25 * ((v - ok) / (att - ok));
+  return Math.max(10, 55 - 35 * ((v - att) / (att - ok)));
 }
+/** Spalle in bolla: più le gambe sono inclinate, più tolleranza sulle spalle. */
+export function puntiSpalle(spalle: number, gambe: number): number {
+  const { ok, attenzione, perGradoGambe: k } = SOGLIE.spalle;
+  return puntiBasso(spalle, ok + k.ok * gambe, attenzione + k.attenzione * gambe);
+}
+/** Punti 0-100 quando "più è meglio". */
+export function puntiAlto(x: number, ok: number, att: number): number {
+  if (x >= ok) return Math.min(100, 80 + 20 * ((x - ok) / ok));
+  if (x >= att) return 55 + 25 * ((x - att) / (ok - att));
+  return Math.max(10, 55 - 35 * ((att - x) / (ok - att)));
+}
+const esitoDa = (p: number): Esito => (p >= 80 ? 'ok' : p >= 55 ? 'attenzione' : 'da correggere');
+
+/** La scala a 7 giudizi del maestro. */
+export const SCALA = [
+  { min: 95, nome: 'perfetto' },
+  { min: 85, nome: 'ottimo' },
+  { min: 75, nome: 'molto buono' },
+  { min: 65, nome: 'buono' },
+  { min: 55, nome: 'discreto' },
+  { min: 45, nome: 'sufficiente' },
+  { min: 0, nome: 'insufficiente' },
+];
+export const giudizio7 = (punti: number) => (Number.isNaN(punti) ? 'non valutabile' : SCALA.find((g) => punti >= g.min)!.nome);
 
 /** Punteggio "seduto": più alto = più seduto. Combina anche dietro i piedi e busto-coscia chiuso. */
 export function punteggioSeduto(ancheAvanti: number, anca: number): number {
@@ -98,49 +129,50 @@ export function giudicaCurva(c: Curva, livello: Livello): Giudizio[] {
   const lato = viste.filter((v) => v === 'lato').length > f.length / 2;
   const fronte = viste.filter((v) => v === 'fronte').length > f.length / 2;
   const out: Giudizio[] = [];
-  const add = (voce: string, gruppo: Gruppo, key: string, esito: Esito, misura: string) =>
-    out.push({ voce, gruppo, esito, misura, consiglio: esito === 'ok' || esito === 'non valutabile' ? undefined : TESTI[key][livello] });
+  const add = (voce: string, gruppo: Gruppo, key: string, punti: number | null, misura: string) => {
+    if (punti === null) { out.push({ voce, gruppo, esito: 'non valutabile', punti: NaN, misura }); return; }
+    const p = Math.round(punti), esito = esitoDa(p);
+    out.push({ voce, gruppo, esito, punti: p, misura, consiglio: esito === 'ok' ? undefined : TESTI[key][livello] });
+  };
 
   // --- I 5 criteri del maestro ---
   const bs = median(f.map((x) => x.spalleVsSci));
-  add('Busto verso gli sci', 'maestro', 'bustoSci', grade(bs, SOGLIE.bustoSci.ok, SOGLIE.bustoSci.attenzione),
-    `rotazione stimata ${bs.toFixed(0)}°`);
+  add('Busto verso gli sci', 'maestro', 'bustoSci', puntiBasso(bs, SOGLIE.bustoSci.ok, SOGLIE.bustoSci.attenzione), `rotazione stimata ${bs.toFixed(0)}°`);
 
   const ginocchi = f.map((x) => x.ginocchio);
   const gMax = Math.max(...ginocchi);
   const an = median(f.map((x) => x.anca));
-  let e2: Esito = 'ok';
-  if (gMax > SOGLIE.ginocchioMax.errore) e2 = 'da correggere';
-  else if (gMax > SOGLIE.ginocchioMax.attenzione || an > SOGLIE.anca.max || an < SOGLIE.anca.min) e2 = 'attenzione';
-  add('Posizione pronta', 'maestro', 'posizione', e2, `ginocchio fino a ${gMax.toFixed(0)}°, busto-coscia ${an.toFixed(0)}°`);
+  const pG = puntiBasso(gMax - 120, SOGLIE.ginocchioMax.attenzione - 120, SOGLIE.ginocchioMax.errore - 120);
+  const fuori = an < SOGLIE.anca.min ? SOGLIE.anca.min - an : an > SOGLIE.anca.max ? an - SOGLIE.anca.max : 0;
+  const pA = fuori === 0 ? 90 : Math.max(10, 80 - fuori * 2.5);
+  add('Posizione pronta', 'maestro', 'posizione', Math.min(pG, pA), `ginocchio fino a ${gMax.toFixed(0)}°, busto-coscia ${an.toFixed(0)}°`);
 
   const sp = Math.abs(c.apiceFrame.spalleIncl);
-  if (lato) add('Spalle in bolla', 'maestro', 'spalle', 'non valutabile', 'ripresa di lato');
-  else add('Spalle in bolla', 'maestro', 'spalle', grade(sp, SOGLIE.spalle.ok, SOGLIE.spalle.attenzione), `spalle inclinate di ${sp.toFixed(0)}°`);
+  add('Spalle in bolla', 'maestro', 'spalle', lato ? null : puntiSpalle(sp, Math.abs(c.apiceFrame.gambeIncl)),
+    lato ? 'ripresa di lato' : `spalle inclinate di ${sp.toFixed(0)}°`);
 
-  add('Tempismo di curva', 'maestro', 'tempismo', grade(c.costruzioneSpigolo, SOGLIE.spigolo.ok, SOGLIE.spigolo.attenzione),
+  add('Tempismo di curva', 'maestro', 'tempismo', puntiBasso(c.costruzioneSpigolo, SOGLIE.spigolo.ok, SOGLIE.spigolo.attenzione),
     `spigolo pieno al ${(c.costruzioneSpigolo * 100).toFixed(0)}% della curva`);
 
   const sed = punteggioSeduto(median(f.map((x) => x.ancheAvanti)), an);
-  if (fronte) add('Bacino sopra i piedi', 'maestro', 'seduto', 'non valutabile', 'ripresa da davanti o da dietro');
-  else add('Bacino sopra i piedi', 'maestro', 'seduto', grade(sed, SOGLIE.seduto.ok, SOGLIE.seduto.attenzione),
-    sed > SOGLIE.seduto.ok ? 'bacino dietro i piedi' : 'bacino sopra i piedi');
+  add('Bacino sopra i piedi', 'maestro', 'seduto', fronte ? null : puntiBasso(sed, SOGLIE.seduto.ok, SOGLIE.seduto.attenzione),
+    fronte ? 'ripresa esattamente frontale' : sed > SOGLIE.seduto.ok ? 'bacino dietro i piedi' : 'bacino sopra i piedi');
 
   // --- Le metriche degli sci (quelle di Carv), stimate dal corpo ---
   const incl = Math.abs(c.apiceFrame.gambeIncl);
   const [iOk, iAtt] = SOGLIE.inclinazione[livello];
-  add('Angolo di spigolo', 'sci', 'inclinazione', gradeAlto(incl, iOk, iAtt), `gambe inclinate di ${incl.toFixed(0)}° all'apice`);
+  add('Angolo di spigolo', 'sci', 'inclinazione', puntiAlto(incl, iOk, iAtt), `gambe inclinate di ${incl.toFixed(0)}° all'apice`);
 
   const tib = median(f.map((x) => x.tibieDiff));
-  if (lato) add('Sci paralleli', 'sci', 'tibie', 'non valutabile', 'ripresa di lato');
-  else add('Sci paralleli', 'sci', 'tibie', grade(tib, SOGLIE.tibie.ok, SOGLIE.tibie.attenzione), `tibie diverse di ${tib.toFixed(0)}°`);
+  add('Sci paralleli', 'sci', 'tibie', lato ? null : puntiBasso(tib, SOGLIE.tibie.ok, SOGLIE.tibie.attenzione),
+    lato ? 'ripresa di lato' : `tibie diverse di ${tib.toFixed(0)}°`);
 
   const escursione = gMax - Math.min(...ginocchi);
-  add('Flesso-estensione', 'sci', 'flessione', gradeAlto(escursione, SOGLIE.flessione.ok, SOGLIE.flessione.attenzione),
+  add('Flesso-estensione', 'sci', 'flessione', puntiAlto(escursione, SOGLIE.flessione.ok, SOGLIE.flessione.attenzione),
     `ginocchio da ${Math.min(...ginocchi).toFixed(0)}° a ${gMax.toFixed(0)}°`);
 
   const ango = incl - Math.abs(c.apiceFrame.bustoIncl);
-  add('Angolazione', 'sci', 'angolazione', gradeAlto(ango, SOGLIE.angolazione.ok, SOGLIE.angolazione.attenzione),
+  add('Angolazione', 'sci', 'angolazione', puntiAlto(ango, SOGLIE.angolazione.ok, SOGLIE.angolazione.attenzione),
     `gambe ${ango >= 0 ? 'più' : 'meno'} inclinate del busto di ${Math.abs(ango).toFixed(0)}°`);
 
   return out;
@@ -154,19 +186,18 @@ export function giudicaRitmo(curve: Curva[]): Giudizio | null {
   const cv = Math.sqrt(d.reduce((a, b) => a + (b - m) ** 2, 0) / d.length) / m;
   const esito = grade(cv, SOGLIE.ritmo.ok, SOGLIE.ritmo.attenzione);
   return {
-    voce: 'Ritmo tra le curve', gruppo: 'sci', esito, misura: `durata media ${m.toFixed(1)} s, variazione ${(cv * 100).toFixed(0)}%`,
+    voce: 'Ritmo tra le curve', gruppo: 'sci', esito, punti: Math.round(puntiBasso(cv, SOGLIE.ritmo.ok, SOGLIE.ritmo.attenzione)), misura: `durata media ${m.toFixed(1)} s, variazione ${(cv * 100).toFixed(0)}%`,
     consiglio: esito === 'ok' ? undefined : 'Cerca curve tutte della stessa durata: conta il ritmo ad alta voce, uno-due, uno-due.',
   };
 }
 
-const PESO: Record<Esito, number> = { ok: 100, attenzione: 60, 'da correggere': 20, 'non valutabile': NaN };
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
 
 /** Punteggio 0-100 per voce, media su tutte le curve valutabili. */
 export function punteggi(curve: Giudizio[][]): { voce: string; gruppo: Gruppo; punti: number }[] {
   const voci = curve[0] ?? [];
   return voci.map(({ voce, gruppo }) => {
-    const v = curve.map((gs) => PESO[gs.find((g) => g.voce === voce)!.esito]).filter((x) => !Number.isNaN(x));
+    const v = curve.map((gs) => gs.find((g) => g.voce === voce)!.punti).filter((x) => !Number.isNaN(x));
     return { voce, gruppo, punti: v.length ? Math.round(avg(v)) : NaN };
   });
 }
@@ -174,7 +205,7 @@ export function punteggi(curve: Giudizio[][]): { voce: string; gruppo: Gruppo; p
 /** Simmetria: confronta il punteggio medio delle curve a destra con quelle a sinistra. */
 export function simmetria(curve: Curva[], giudizi: Giudizio[][]): { destra: number; sinistra: number; esito: Esito } | null {
   const media = (lato: Curva['lato']) =>
-    avg(curve.flatMap((c, i) => (c.lato === lato ? giudizi[i].map((g) => PESO[g.esito]).filter((x) => !Number.isNaN(x)) : [])));
+    avg(curve.flatMap((c, i) => (c.lato === lato ? giudizi[i].map((g) => g.punti).filter((x) => !Number.isNaN(x)) : [])));
   const destra = media('destra'), sinistra = media('sinistra');
   if (Number.isNaN(destra) || Number.isNaN(sinistra)) return null;
   return { destra: Math.round(destra), sinistra: Math.round(sinistra),
@@ -205,7 +236,7 @@ export function carvingScore(p: { gruppo: Gruppo; punti: number }[], nCurve: num
 
 /** Punteggio di una singola curva, con lo stesso peso del Carving Score. */
 export function punteggioCurva(gs: Giudizio[]): number {
-  const v = (g: Gruppo) => avg(gs.filter((x) => x.gruppo === g).map((x) => PESO[x.esito]).filter((x) => !Number.isNaN(x)));
+  const v = (g: Gruppo) => avg(gs.filter((x) => x.gruppo === g).map((x) => x.punti).filter((x) => !Number.isNaN(x)));
   const m = v('maestro'), s = v('sci');
   return Math.round(Number.isNaN(s) ? m : Number.isNaN(m) ? s : 0.7 * m + 0.3 * s);
 }
