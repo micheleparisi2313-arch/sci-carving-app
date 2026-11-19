@@ -17,6 +17,7 @@ export type FrameMetrics = {
   bustoIncl: number;      // inclinazione anche->spalle rispetto alla verticale
   spalleVsSci: number;    // 0 = spalle frontali alle punte degli sci (stima 3D)
   ancheAvanti: number;    // anche davanti(+) o dietro(-) i piedi, in % della lunghezza della gamba
+  tibieDiff: number;      // differenza di inclinazione tra le due tibie (0 = sci paralleli, spigoli simili)
   vista: 'fronte' | 'lato' | 'misto';
   visibilita: number;
 };
@@ -76,6 +77,10 @@ export function frameMetrics(pts: P2[], w: P3[]): FrameMetrics {
   const ratio = shW / torso;
   const vista = ratio < 0.35 ? 'lato' : ratio > 0.9 ? 'fronte' : 'misto';
 
+  // sci paralleli: le due tibie inclinate allo stesso modo (dal video, come i "due spigoli simili" di Carv)
+  const tibiaL = verticalLean(pts[IDX.la], pts[IDX.lk]);
+  const tibiaR = verticalLean(pts[IDX.ra], pts[IDX.rk]);
+
   const key = [IDX.ls, IDX.rs, IDX.lh, IDX.rh, IDX.lk, IDX.rk, IDX.la, IDX.ra];
   return {
     ginocchio: Math.max(kneeL, kneeR),
@@ -85,6 +90,7 @@ export function frameMetrics(pts: P2[], w: P3[]): FrameMetrics {
     bustoIncl: verticalLean(hips2, sh2),
     spalleVsSci,
     ancheAvanti,
+    tibieDiff: Math.abs(tibiaL - tibiaR),
     vista,
     visibilita: key.reduce((s, i) => s + pts[i].v, 0) / key.length,
   };
