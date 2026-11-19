@@ -20,6 +20,9 @@ function seek(video: HTMLVideoElement, t: number): Promise<void> {
   });
 }
 
+/** Quanti secondi di sciata analizzare al massimo: bastano per 8-15 curve e tengono l'attesa sotto controllo. */
+export const DURATA_MAX_S = 25;
+
 export async function analizza(
   video: HTMLVideoElement,
   tap: { x: number; y: number; t: number },
@@ -28,10 +31,8 @@ export async function analizza(
 ): Promise<Analisi> {
   await loadPose();
   const w = video.videoWidth, h = video.videoHeight;
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d', { willReadFrequently: false })!;
-  const grab = async (t: number) => { await seek(video, t); ctx.drawImage(video, 0, 0, w, h); };
+  // ritaglio direttamente dal video: niente copia del fotogramma intero (un video 4K da iPhone pesa 33 MB a fotogramma)
+  const grab = (t: number) => seek(video, t);
   const box = (cx: number, cy: number, half: number) => ({ x0: cx - half, y0: cy - half, x1: cx + half, y1: cy + half });
   const minDim = Math.min(w, h);
 
@@ -40,7 +41,7 @@ export async function analizza(
   let prev: { cx: number; cy: number; size: number } | null = null;
   let best = Infinity;
   for (const f of [0.12, 0.2, 0.32, 0.5]) {
-    const p = detectIn(canvas, w, h, box(tap.x, tap.y, (minDim * f) / 2 + 20));
+    const p = detectIn(video, w, h, box(tap.x, tap.y, (minDim * f) / 2 + 20));
     if (!p || visib(p) < 0.4) continue;
     const b = bodyBox(p.pts);
     const d = Math.hypot(b.cx - tap.x, b.cy - tap.y);
@@ -50,14 +51,14 @@ export async function analizza(
 
   // 2. inseguimento in avanti dal momento toccato
   const campioni: Analisi['campioni'] = [];
-  const end = video.duration;
+  const end = Math.min(video.duration, tap.t + DURATA_MAX_S);
   let lost = 0;
   for (let t = tap.t; t < end; t += 1 / fps) {
     await grab(t);
     let found: Pose | null = null;
     const mults = lost >= 6 ? [0.9, 1.6, 2.5, 4] : [0.9, 1.6, 2.5];
     for (const m of mults) {
-      const p = detectIn(canvas, w, h, box(prev.cx, prev.cy, prev.size * m + 20));
+      const p = detectIn(video, w, h, box(prev.cx, prev.cy, prev.size * m + 20));
       if (!p || visib(p) < 0.4) continue;
       const b = bodyBox(p.pts);
       const jump = Math.hypot(b.cx - prev.cx, b.cy - prev.cy);
