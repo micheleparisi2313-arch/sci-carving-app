@@ -34,8 +34,9 @@ export const SOGLIE = {
   ritmo: { ok: 0.25, attenzione: 0.4 },          // variazione della durata delle curve
   // gradi all'apice: [ok, attenzione, top = 100 punti]. Livello 7: 45-50°
   inclinazione: { avanzato: [40, 28, 50], intermedio: [32, 20, 42] } as Record<Livello, [number, number, number]>,
-  // gradi di differenza tra le tibie: da davanti la gamba interna è più piegata, livello 7 = 8-13°
-  tibie: { ok: 13, attenzione: 20 },
+  // gradi di differenza tra le tibie: da davanti la gamba interna è più piegata, livello 7 = 8-13°.
+  // La misura dal video è rumorosa: Michele chiede di essere clementi e punire solo errori gravi.
+  tibie: { ok: 18, attenzione: 30 },
   flessione: { ok: 25, attenzione: 15 },         // gradi di escursione del ginocchio nella curva
   angolazione: { ok: 15, attenzione: 5 },        // gambe più inclinate del busto, in gradi
   simmetria: { ok: 10, attenzione: 20 },         // punti di differenza tra curve a destra e a sinistra
