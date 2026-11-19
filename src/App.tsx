@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { analizza, type Analisi } from './analyze';
 import { EDGES } from './pose';
 import { trovaCurve } from './turns';
-import { giudicaCurva, giudicaRitmo, priorita, punteggi, type Esito, type Livello } from './rules';
-import { caricaStorico, salvaNelloStorico, type VoceStorico } from './storage';
+import { CURVE_CLASSIFICA, CURVE_MINIME, carvingScore, punteggioClassifica, punteggioCurva, giudicaCurva, giudicaRitmo, priorita, punteggi, simmetria, type Esito, type Livello } from './rules';
+import { aggiornaSkiIq, caricaStorico, salvaNelloStorico, type VoceStorico } from './storage';
+import { condividi, creaClip } from './share';
+import { Progressi } from './Progressi';
 
 type Fase = 'scelta' | 'tocco' | 'analisi' | 'referto';
 
@@ -22,6 +24,7 @@ export default function App() {
   const [analisi, setAnalisi] = useState<Analisi | null>(null);
   const [durata, setDurata] = useState(1);
   const [storico, setStorico] = useState<VoceStorico[]>(caricaStorico);
+  const [clip, setClip] = useState<{ stato: 'idle' | 'rec' | 'fatto'; p: number; msg?: string }>({ stato: 'idle', p: 0 });
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
 
@@ -31,7 +34,13 @@ export default function App() {
     if (!analisi) return null;
     const curve = trovaCurve(analisi.campioni);
     const giudizi = curve.map((c) => giudicaCurva(c, livello));
-    return { curve, giudizi, ritmo: giudicaRitmo(curve), punti: punteggi(giudizi), top: priorita(giudizi) };
+    const punti = punteggi(giudizi);
+    const perCurva = giudizi.map(punteggioCurva);
+    return {
+      perCurva, classifica: punteggioClassifica(perCurva),
+      curve, giudizi, punti, ritmo: giudicaRitmo(curve), top: priorita(giudizi),
+      simm: simmetria(curve, giudizi), score: carvingScore(punti, curve.length),
+    };
   }, [analisi, livello]);
 
   // disegna lo scheletro sopra il video, sincronizzato con il tempo
@@ -96,9 +105,24 @@ export default function App() {
       videoRef.current.currentTime = tap.t;
       const curve = trovaCurve(a.campioni);
       const p = punteggi(curve.map((c) => giudicaCurva(c, livello)));
-      setStorico(salvaNelloStorico({ data: new Date().toISOString(), nome, curve: curve.length, punti: p }));
+      const sc = carvingScore(p, curve.length);
+      const cl = punteggioClassifica(curve.map((c) => punteggioCurva(giudicaCurva(c, livello))));
+      setStorico(salvaNelloStorico({ data: new Date().toISOString(), nome, curve: curve.length, score: sc.punti, valido: sc.valido, classifica: cl ?? undefined, punti: p }));
     } catch (err) {
       setErrore(err instanceof Error ? err.message : String(err)); setFase('tocco');
+    }
+  }
+
+  async function faiClip() {
+    if (!videoRef.current || !analisi || !referto) return;
+    setClip({ stato: 'rec', p: 0 });
+    try {
+      const f = await creaClip(videoRef.current, analisi, `Carving Score ${referto.score.punti}`,
+        `${referto.score.fascia} · ${referto.curve.length} curve`, (p) => setClip({ stato: 'rec', p }));
+      const esito = await condividi(f);
+      setClip({ stato: 'fatto', p: 1, msg: esito === 'condivisa' ? 'Clip condivisa.' : 'Clip salvata nei download.' });
+    } catch (err) {
+      setClip({ stato: 'idle', p: 0, msg: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -159,33 +183,52 @@ export default function App() {
 
       {fase === 'referto' && referto && (
         <section className="card">
-          <h2>Il tuo referto</h2>
           {referto.curve.length === 0 ? (
-            <p>Non sono riuscito a riconoscere curve complete. Prova con una ripresa più vicina e più stabile.</p>
+            <><h2>Il tuo referto</h2><p>Non sono riuscito a riconoscere curve complete. Prova con una ripresa più vicina e più stabile.</p></>
           ) : (
             <>
-              <p className="sub">{referto.curve.length} curve analizzate. Tocca una curva per rivederla.</p>
-              <div className="scores">
-                {referto.punti.map((p) => (
-                  <div key={p.voce} className="score">
-                    <span>{p.voce}</span>
-                    <div className="bar"><div style={{ width: `${Number.isNaN(p.punti) ? 0 : p.punti}%` }} /></div>
-                    <b>{Number.isNaN(p.punti) ? '–' : p.punti}</b>
+              <div className="hero">
+                <div className="big">{referto.score.punti}</div>
+                <div>
+                  <div className="label">Carving Score</div>
+                  <div className="fascia">{referto.score.fascia}</div>
+                  <div className="sub">
+                    {referto.curve.length} curve analizzate.{' '}
+                    {referto.score.valido ? 'Punteggio valido.' : `Provvisorio: servono almeno ${CURVE_MINIME} curve.`}
                   </div>
-                ))}
+                  <div className="rank">
+                    {referto.classifica !== null
+                      ? <>Punteggio classifica: <b>{referto.classifica}</b> (migliori {CURVE_CLASSIFICA} curve di fila)</>
+                      : `Per entrare in classifica con gli amici servono ${CURVE_CLASSIFICA} curve.`}
+                  </div>
+                </div>
               </div>
+
               {referto.top.length > 0 && (
                 <>
                   <h3>Su cosa lavorare</h3>
                   <ol className="tips">{referto.top.map((g) => <li key={g.voce}><b>{g.voce}.</b> {g.consiglio}</li>)}</ol>
                 </>
               )}
+
+              <h3>I criteri del maestro</h3>
+              <Barre punti={referto.punti.filter((p) => p.gruppo === 'maestro')} />
+              <h3>Gli sci, stimati dal corpo</h3>
+              <Barre punti={referto.punti.filter((p) => p.gruppo === 'sci')} />
               {referto.ritmo && <p className="sub">Ritmo tra le curve: <b style={{ color: COLORE[referto.ritmo.esito] }}>{referto.ritmo.esito}</b> ({referto.ritmo.misura}).</p>}
+              {referto.simm && <p className="sub">Destra {referto.simm.destra}, sinistra {referto.simm.sinistra}: simmetria <b style={{ color: COLORE[referto.simm.esito] }}>{referto.simm.esito}</b>.</p>}
+
+              <button className="share" disabled={clip.stato === 'rec'} onClick={faiClip}>
+                {clip.stato === 'rec' ? `Preparo la clip, ${Math.round(clip.p * 100)}%` : 'Crea la clip da condividere'}
+              </button>
+              {clip.msg && <p className="sub">{clip.msg}</p>}
+
               <h3>Curva per curva</h3>
+              <p className="sub">Tocca una curva per rivederla nel punto di massimo spigolo.</p>
               <div className="turns">
                 {referto.curve.map((c, i) => (
                   <button key={i} className="turn" onClick={() => vaiA(c.apice)}>
-                    <span className="tname">Curva {i + 1} a {c.lato} <small>{c.apice.toFixed(1)} s</small></span>
+                    <span className="tname">Curva {i + 1} a {c.lato} <small>{c.apice.toFixed(1)} s</small><em className="tscore">{referto.perCurva[i]}</em></span>
                     {referto.giudizi[i].map((g) => (
                       <span key={g.voce} className="chip" title={g.misura}>
                         <i style={{ background: COLORE[g.esito] }} />{g.voce}: {g.esito}
@@ -203,19 +246,43 @@ export default function App() {
       {storico.length > 0 && (
         <section className="card">
           <h2>I tuoi progressi</h2>
+          <Progressi storico={storico} />
           <table>
-            <thead><tr><th>Data</th>{storico[0].punti.map((p) => <th key={p.voce}>{p.voce}</th>)}</tr></thead>
+            <thead><tr><th>Data</th><th>Carving Score</th><th>Curve</th><th>Classifica</th><th>Ski:IQ Carv</th></tr></thead>
             <tbody>
               {storico.map((s) => (
-                <tr key={s.data}><td>{new Date(s.data).toLocaleDateString('it-IT')}</td>
-                  {s.punti.map((p) => <td key={p.voce}>{Number.isNaN(p.punti) || p.punti === null ? '–' : p.punti}</td>)}</tr>
+                <tr key={s.data}>
+                  <td>{new Date(s.data).toLocaleDateString('it-IT')}</td>
+                  <td>{s.score ?? '–'}{s.valido === false ? ' (provv.)' : ''}</td>
+                  <td>{s.curve}</td>
+                  <td>{s.classifica ?? '–'}</td>
+                  <td>
+                    <input className="iq" inputMode="numeric" placeholder="facoltativo" defaultValue={s.skiIq ?? ''}
+                      aria-label="Ski:IQ di Carv della giornata"
+                      onBlur={(e) => { const n = parseInt(e.target.value, 10); setStorico(aggiornaSkiIq(s.data, Number.isNaN(n) ? undefined : n)); }} />
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
-          <p className="note">Per ora lo storico resta solo su questo telefono.</p>
+          <p className="note">Hai Carv? Inserisci lo Ski:IQ della giornata per vedere tutto in un posto. Per ora lo storico resta solo su questo telefono.</p>
         </section>
       )}
     </main>
+  );
+}
+
+function Barre({ punti }: { punti: { voce: string; punti: number }[] }) {
+  return (
+    <div className="scores">
+      {punti.map((p) => (
+        <div key={p.voce} className="score">
+          <span>{p.voce}</span>
+          <div className="bar"><div style={{ width: `${Number.isNaN(p.punti) ? 0 : p.punti}%` }} /></div>
+          <b>{Number.isNaN(p.punti) ? '–' : p.punti}</b>
+        </div>
+      ))}
+    </div>
   );
 }
 

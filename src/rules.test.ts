@@ -13,3 +13,25 @@ describe('misure', () => {
     expect(punteggioSeduto(-40, 93)).toBeGreaterThan(punteggioSeduto(10, 116));
   });
 });
+
+import { carvingScore } from './rules';
+describe('Carving Score', () => {
+  it('pesa 70% maestro e 30% sci', () => {
+    const r = carvingScore([{ gruppo: 'maestro', punti: 100 }, { gruppo: 'sci', punti: 0 }], 6);
+    expect(r.punti).toBe(70);
+    expect(r.valido).toBe(true);
+  });
+  it('è provvisorio con meno di 4 curve', () => {
+    expect(carvingScore([{ gruppo: 'maestro', punti: 80 }], 3).valido).toBe(false);
+  });
+});
+
+import { punteggioClassifica } from './rules';
+describe('classifica', () => {
+  it('serve almeno 5 curve', () => {
+    expect(punteggioClassifica([80, 80, 80, 80])).toBeNull();
+  });
+  it('prende le migliori 5 curve di fila', () => {
+    expect(punteggioClassifica([20, 90, 90, 90, 90, 90, 20])).toBe(90);
+  });
+});
