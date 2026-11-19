@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { angleAt, lineTilt } from './metrics';
-import { punteggioSeduto, puntiSpalle, giudizio7, puntiBasso, puntiAlto, SOGLIE } from './rules';
+import { punteggioSeduto, puntiSpalle, giudizio7, puntiBasso, puntiAlto, riconosciArco, SOGLIE } from './rules';
 
 describe('misure', () => {
   it('angolo retto', () => {
@@ -58,5 +58,16 @@ describe('taratura sul livello 7 (riferimento di Michele)', () => {
     const [ok, att, top] = SOGLIE.inclinazione.avanzato;
     expect(puntiAlto(50, ok, att, top)).toBe(100);
     expect(giudizio7(puntiAlto(48, ok, att, top))).toBe('perfetto');
+  });
+});
+
+describe('arco corto e arco medio', () => {
+  const curva = (inizio: number) => ({ inizio, fine: inizio + 0.5 }) as unknown as Parameters<typeof riconosciArco>[0][number];
+  it('riconosce l\'arco dal ritmo', () => {
+    expect(riconosciArco([0, 0.8, 1.6, 2.4].map(curva))).toBe('corto');
+    expect(riconosciArco([0, 1.5, 3, 4.6].map(curva))).toBe('medio');
+  });
+  it('nell\'arco medio le spalle hanno più tolleranza', () => {
+    expect(puntiSpalle(30, 65, 'medio')).toBeGreaterThan(puntiSpalle(30, 65, 'corto'));
   });
 });
