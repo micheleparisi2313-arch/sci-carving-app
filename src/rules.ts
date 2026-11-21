@@ -151,7 +151,9 @@ export const SCALA = [
   { min: 45, nome: 'sufficiente' },
   { min: 0, nome: 'insufficiente' },
 ];
-export const giudizio7 = (punti: number) => (Number.isNaN(punti) ? 'non valutabile' : SCALA.find((g) => punti >= g.min)!.nome);
+const valido = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+export const giudizio7 = (punti: number) =>
+  valido(punti) ? (SCALA.find((g) => punti >= g.min) ?? SCALA[SCALA.length - 1]).nome : 'non valutabile';
 
 /** Punteggio "seduto": più alto = più seduto. Combina anche dietro i piedi e busto-coscia chiuso. */
 export function punteggioSeduto(ancheAvanti: number, anca: number): number {
@@ -267,7 +269,9 @@ export function carvingScore(p: { gruppo: Gruppo; punti: number }[], nCurve: num
   const s = avg(p.filter((x) => x.gruppo === 'sci' && !Number.isNaN(x.punti)).map((x) => x.punti));
   const score = Number.isNaN(s) ? m : Number.isNaN(m) ? s : 0.7 * m + 0.3 * s;
   const punti = Math.round(score);
-  return { punti, fascia: FASCE.find((f) => punti >= f.min)!.nome, valido: nCurve >= CURVE_MINIME };
+  // senza curve non c'è punteggio: niente fascia, invece di bloccare l'app
+  const fascia = valido(punti) ? (FASCE.find((f) => punti >= f.min) ?? FASCE[FASCE.length - 1]).nome : 'Non valutabile';
+  return { punti, fascia, valido: nCurve >= CURVE_MINIME };
 }
 
 /** Punteggio di una singola curva, con lo stesso peso del Carving Score. */

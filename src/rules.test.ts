@@ -71,3 +71,15 @@ describe('arco corto e arco medio', () => {
     expect(puntiSpalle(30, 65, 'medio')).toBeGreaterThan(puntiSpalle(30, 65, 'corto'));
   });
 });
+
+describe('robustezza (iPhone)', () => {
+  it('giudizio7 non si blocca con valori non validi', () => {
+    for (const x of [NaN, undefined, null, -5, Infinity]) expect(giudizio7(x as number)).toBeTypeOf('string');
+    expect(giudizio7(-5)).toBe('insufficiente');
+  });
+  it('carvingScore senza curve non si blocca', () => {
+    const sc = carvingScore([], 0);
+    expect(sc.fascia).toBe('Non valutabile');
+    expect(sc.valido).toBe(false);
+  });
+});

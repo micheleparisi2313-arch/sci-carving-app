@@ -186,7 +186,7 @@ export default function App() {
     setClip({ stato: 'rec', p: 0 });
     try {
       const f = await creaClip(videoRef.current, analisi, `Carving Score ${referto.score.punti}`,
-        `${referto.score.fascia} · ${giudizio7(referto.score.punti)} · ${referto.curve.length} curve`, (p) => setClip({ stato: 'rec', p }));
+        `${referto.score.fascia} · ${giudizio7(referto.score.punti)} · ${referto.curve.length} ${referto.curve.length === 1 ? "curva" : "curve"}`, (p) => setClip({ stato: 'rec', p }));
       const esito = await condividi(f);
       setClip({ stato: 'fatto', p: 1, msg: esito === 'condivisa' ? 'Clip condivisa.' : 'Clip salvata nei download.' });
     } catch (err) {
@@ -275,6 +275,9 @@ export default function App() {
             <>
               <h2>Nessuna curva riconosciuta</h2>
               <p>Lo sciatore è troppo piccolo, esce dall'inquadratura o fa meno di una curva completa. Riprova con una ripresa più vicina e più stabile, seguendo la guida.</p>
+              <p className="note">Ho seguito lo sciatore in {analisi?.campioni.filter((c) => c.m).length ?? 0} fotogrammi
+                su {analisi?.campioni.length ?? 0} ({((analisi?.campioni.length ?? 0) / (analisi?.fps || 15)).toFixed(1)} s di video).
+                Se sono pochi, tocca lo sciatore in un momento in cui è grande e ben visibile.</p>
               <a className="guide-link" href="#guida">Come filmare</a>
             </>
           ) : (
@@ -288,7 +291,7 @@ export default function App() {
                   <span className={`voto v-${slug(giudizio7(referto.score.punti))}`}>{giudizio7(referto.score.punti)}</span>
                   <div className="fascia">{referto.score.fascia}</div>
                   <div className="sub">
-                    {referto.curve.length} curve, arco {referto.arco}{sceltaArco === 'auto' ? ' (dal ritmo)' : ''}.{' '}
+                    {referto.curve.length} {referto.curve.length === 1 ? "curva" : "curve"}, arco {referto.arco}{sceltaArco === 'auto' ? ' (dal ritmo)' : ''}.{' '}
                     {referto.score.valido ? 'Punteggio valido.' : `Provvisorio: servono ${CURVE_MINIME} curve.`}
                   </div>
                 </div>
